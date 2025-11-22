@@ -66,7 +66,42 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
+// Run database migration on startup (only in production)
+async function initializeDatabase() {
+  if (process.env.DATABASE_URL) {
+    try {
+      console.log('🔄 Checking database...');
+      const { pool } = require('./config/database');
+      
+      // Check if bosses table exists
+      const tableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = 'bosses'
+        );
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        console.log('📦 Running initial database migration...');
+        const { exec } = require('child_process');
+        exec('node migrate.js', (error, stdout, stderr) => {
+          if (error) {
+            console.error('❌ Migration error:', error);
+          } else {
+            console.log(stdout);
+          }
+        });
+      } else {
+        console.log('✅ Database already initialized');
+      }
+    } catch (error) {
+      console.error('⚠️  Database check failed:', error.message);
+    }
+  }
+}
+
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🔥 Dark Souls Wiki API running on port ${PORT}`);
+  await initializeDatabase();
 });
